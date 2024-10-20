@@ -1,56 +1,14 @@
 import asyncio
-import os
-from contextlib import asynccontextmanager
-from pathlib import Path
 
-import redis
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from app.db.redis import r
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
-from fhir.resources.R4B.bundle import Bundle
 from fhir.resources.R4B.patient import Patient
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    print('Loading patient data..')
-    await load_patient_data(dataset_folder='./dataset')
-    print('Loading patient data completed')
-
-    yield
+router = APIRouter()
 
 
-app = FastAPI(lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-r = redis.Redis(host='localhost', port=6379, db=6, decode_responses=True)
-
-
-async def load_patient_data(dataset_folder: str):
-    if r.exists('patients_loaded'):
-        return
-
-    for filename in os.listdir(dataset_folder):
-        file_path = Path(os.path.join(dataset_folder, filename))
-        bundle = Bundle.parse_file(file_path)
-
-        for entry in bundle.entry:
-            if entry.resource.resource_type == 'Patient':
-                patient = entry.resource
-
-                await asyncio.to_thread(r.set, f"Bundle:{patient.id}", bundle.json())
-                await asyncio.to_thread(r.set, f"Patient:{patient.id}", patient.json())
-
-    await asyncio.to_thread(r.set, 'patients_loaded', 'true')
-
-@app.get('/api/v1/patients')
+@router.get('/api/v1/patients')
 async def get_patients():
     """API endpoint to get all patient data"""
     patient_keys = await asyncio.to_thread(r.keys, 'Patient:*')
@@ -64,7 +22,8 @@ async def get_patients():
 
     return patients
 
-@app.get('/api/v1/patients-html', response_class=HTMLResponse)
+
+@router.get('/api/v1/patients-html', response_class=HTMLResponse)
 async def get_patients_html():
     """API endpoint to get all patient data as HTML table rows"""
     patient_keys = await asyncio.to_thread(r.keys, 'Patient:*')
@@ -94,7 +53,7 @@ async def get_patients_html():
     return HTMLResponse(content="".join(rows))
 
 
-@app.get('/api/v1/patient/{patient_id}')
+@router.get('/api/v1/patient/{patient_id}')
 async def get_patient(patient_id: str):
     """API endpoint to get a specific patient by ID"""
     patient_data = await asyncio.to_thread(r.get, f"Patient:{patient_id}")
@@ -105,7 +64,7 @@ async def get_patient(patient_id: str):
     return patient_data
 
 
-@app.get('/api/v1/patient-htmx/{patient_id}', response_class=HTMLResponse)
+@router.get('/api/v1/patient-htmx/{patient_id}', response_class=HTMLResponse)
 async def get_patient_html(patient_id: str):
     patient_data = await asyncio.to_thread(r.get, f"Patient:{patient_id}")
 
@@ -134,7 +93,7 @@ async def get_patient_html(patient_id: str):
     return HTMLResponse(content=modal_content)
 
 
-@app.get('/', response_class=HTMLResponse)
+@router.get('/', response_class=HTMLResponse)
 async def load_patient_page():
     """HTML page for loading patients in a table using HTMX"""
     html_content = """
@@ -211,17 +170,3 @@ async def load_patient_page():
     </html>
     """
     return HTMLResponse(content=html_content)
-
-
-@app.get('/api/v1/single-patient-debug')
-async def get_patients():
-    dataset_folder='./dataset'
-
-    for filename in os.listdir(dataset_folder)[:1]:
-        file_path = Path(os.path.join(dataset_folder, filename))
-        bundle = await asyncio.to_thread(Bundle.parse_file, file_path)
-
-        p = [x for x in bundle.entry if x.resource.resource_type == 'Patient']
-
-        return p[0]
-        # return p[0].json()
