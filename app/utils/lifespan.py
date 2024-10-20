@@ -5,13 +5,15 @@ from pathlib import Path
 from app.db.redis import r
 from fhir.resources.R4B.bundle import Bundle
 
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+DATASET_FOLDER = BASE_DIR / 'dataset'
 
-async def load_patient_data(dataset_folder: str):
+async def load_patient_data():
     if r.exists('patients_loaded'):
         return
 
-    for filename in os.listdir(dataset_folder):
-        file_path = Path(os.path.join(dataset_folder, filename))
+    for filename in os.listdir(DATASET_FOLDER):
+        file_path = Path(os.path.join(DATASET_FOLDER, filename))
         bundle = Bundle.parse_file(file_path)
 
         for entry in bundle.entry:

@@ -10,7 +10,7 @@ from .utils.lifespan import load_patient_data
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print('Loading patient data..')
-    await load_patient_data(dataset_folder='./dataset')
+    await load_patient_data()
     print('Loading patient data completed')
 
     yield
@@ -22,8 +22,8 @@ app.include_router(patients.router)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=['*'],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
