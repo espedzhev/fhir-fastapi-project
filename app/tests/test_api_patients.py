@@ -84,7 +84,7 @@ async def test_add_patient_and_retrieve(
 ) -> None:
     await add_patients_to_redis(redis_client)
 
-    response = await app_client.get("/api/v1/patient/1")
+    response = await app_client.get("/api/v1/patients/1")
     assert response.status_code == 200
 
     data = json.loads(response.json())
@@ -101,7 +101,7 @@ async def test_get_patients_html(
 
     response = await app_client.get("/api/v1/patients-htmx")
     assert response.status_code == 200
-    assert "/api/v1/patient-htmx/1" in response.text
+    assert "/api/v1/patients-htmx/1" in response.text
 
 
 @pytest.mark.asyncio

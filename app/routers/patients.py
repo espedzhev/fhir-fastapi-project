@@ -22,7 +22,7 @@ async def get_patients(redis_client: redis.Redis = Depends(get_redis)):
     return patients
 
 
-@router.get("/api/v1/patient/{patient_id}")
+@router.get("/api/v1/patients/{patient_id}")
 async def get_patient(patient_id: str, redis_client: redis.Redis = Depends(get_redis)):
     """API endpoint to get a specific patient by ID"""
     patient_data = await redis_client.get(f"Patient:{patient_id}")
@@ -55,8 +55,8 @@ async def get_patients_html(redis_client: redis.Redis = Depends(get_redis)):
 
             row = f"""
             <tr>
-                <td><a href="#" hx-get="/api/v1/patient-htmx/{patient_id}" hx-target="#patientDetailsModal">{patient_id}</a></td>
-                <td><a href="#" hx-get="/api/v1/patient-htmx/{patient_id}" hx-target="#patientDetailsModal">{full_name}</a></td>
+                <td><a href="#" hx-get="/api/v1/patients-htmx/{patient_id}" hx-target="#patientDetailsModal">{patient_id}</a></td>
+                <td><a href="#" hx-get="/api/v1/patients-htmx/{patient_id}" hx-target="#patientDetailsModal">{full_name}</a></td>
                 <td>{gender}</td>
                 <td>{birth_date}</td>
             </tr>
@@ -66,7 +66,7 @@ async def get_patients_html(redis_client: redis.Redis = Depends(get_redis)):
     return HTMLResponse(content="".join(rows))
 
 
-@router.get("/api/v1/patient-htmx/{patient_id}", response_class=HTMLResponse)
+@router.get("/api/v1/patients-htmx/{patient_id}", response_class=HTMLResponse)
 async def get_patient_html(
     patient_id: str, redis_client: redis.Redis = Depends(get_redis)
 ):
