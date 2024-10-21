@@ -1,3 +1,7 @@
-import redis
+from typing import AsyncIterator
+from redis import asyncio as redis
 
-r = redis.Redis(host='localhost', port=6379, db=6, decode_responses=True)
+
+async def get_redis() -> AsyncIterator[redis.Redis]:
+    async with redis.from_url("redis://localhost:6379/8", decode_responses=True) as client:
+        yield client

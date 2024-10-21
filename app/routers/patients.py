@@ -1,21 +1,20 @@
-import asyncio
-
-from app.db.redis import r
-from fastapi import APIRouter, HTTPException
+from app.db.redis import get_redis
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from fhir.resources.R4B.patient import Patient
+from redis import asyncio as redis
 
 router = APIRouter()
 
 
-@router.get('/api/v1/patients')
-async def get_patients():
+@router.get("/api/v1/patients")
+async def get_patients(redis_client: redis.Redis = Depends(get_redis)):
     """API endpoint to get all patient data"""
-    patient_keys = await asyncio.to_thread(r.keys, 'Patient:*')
+    patient_keys = await redis_client.keys("Patient:*")
     patients = []
 
     for key in patient_keys:
-        patient_data = await asyncio.to_thread(r.get, key)
+        patient_data = await redis_client.get(key)
 
         if patient_data:
             patients.append(patient_data)
@@ -23,62 +22,71 @@ async def get_patients():
     return patients
 
 
-@router.get('/api/v1/patients-html', response_class=HTMLResponse)
-async def get_patients_html():
-    """API endpoint to get all patient data as HTML table rows"""
-    patient_keys = await asyncio.to_thread(r.keys, 'Patient:*')
+@router.get("/api/v1/patient/{patient_id}")
+async def get_patient(patient_id: str, redis_client: redis.Redis = Depends(get_redis)):
+    """API endpoint to get a specific patient by ID"""
+    patient_data = await redis_client.get(f"Patient:{patient_id}")
+
+    if not patient_data:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    return patient_data
+
+
+@router.get("/api/v1/patients-htmx", response_class=HTMLResponse)
+async def get_patients_html(redis_client: redis.Redis = Depends(get_redis)):
+    patient_keys = await redis_client.keys("Patient:*")
     rows = []
 
     for key in patient_keys:
-        patient_data = await asyncio.to_thread(r.get, key)
+        patient_data = await redis_client.get(key)
 
         if patient_data:
             patient = Patient.parse_raw(patient_data).dict()
-            patient_id = patient.get('id', 'N/A')
-            name = patient.get('name', [{}])[0]
-            full_name = f'{' '.join(name.get('given', []))} {name.get('family', '')}'.strip() if name else 'N/A'
-            gender = patient.get('gender', 'N/A')
-            birth_date = patient.get('birthDate', 'N/A')
+            patient_id = patient.get("id", "N/A")
+            name = patient.get("name", [{}])[0]
+            full_name = (
+                f"{' '.join(name.get('given', []))} {name.get('family', '')}".strip()
+                if name
+                else "N/A"
+            )
+            gender = patient.get("gender", "N/A")
+            birth_date = patient.get("birthDate", "N/A")
 
-            row = f'''
+            row = f"""
             <tr>
                 <td><a href="#" hx-get="/api/v1/patient-htmx/{patient_id}" hx-target="#patientDetailsModal">{patient_id}</a></td>
                 <td><a href="#" hx-get="/api/v1/patient-htmx/{patient_id}" hx-target="#patientDetailsModal">{full_name}</a></td>
                 <td>{gender}</td>
                 <td>{birth_date}</td>
             </tr>
-            '''
+            """
             rows.append(row)
 
-    return HTMLResponse(content=''.join(rows))
+    return HTMLResponse(content="".join(rows))
 
 
-@router.get('/api/v1/patient/{patient_id}')
-async def get_patient(patient_id: str):
-    """API endpoint to get a specific patient by ID"""
-    patient_data = await asyncio.to_thread(r.get, f'Patient:{patient_id}')
-
-    if not patient_data:
-        raise HTTPException(status_code=404, detail='Patient not found')
-
-    return patient_data
-
-
-@router.get('/api/v1/patient-htmx/{patient_id}', response_class=HTMLResponse)
-async def get_patient_html(patient_id: str):
-    patient_data = await asyncio.to_thread(r.get, f'Patient:{patient_id}')
+@router.get("/api/v1/patient-htmx/{patient_id}", response_class=HTMLResponse)
+async def get_patient_html(
+    patient_id: str, redis_client: redis.Redis = Depends(get_redis)
+):
+    patient_data = await redis_client.get(f"Patient:{patient_id}")
 
     if not patient_data:
-        raise HTTPException(status_code=404, detail='Patient not found')
+        raise HTTPException(status_code=404, detail="Patient not found")
 
     patient = Patient.parse_raw(patient_data).dict()
-    patient_id = patient.get('id', 'N/A')
-    name = patient.get('name', [{}])[0]
-    full_name = f'{' '.join(name.get('given', []))} {name.get('family', '')}'.strip() if name else 'N/A'
-    gender = patient.get('gender', 'N/A')
-    birth_date = patient.get('birthDate', 'N/A')
+    patient_id = patient.get("id", "N/A")
+    name = patient.get("name", [{}])[0]
+    full_name = (
+        f"{' '.join(name.get('given', []))} {name.get('family', '')}".strip()
+        if name
+        else "N/A"
+    )
+    gender = patient.get("gender", "N/A")
+    birth_date = patient.get("birthDate", "N/A")
 
-    modal_content = f'''
+    modal_content = f"""
     <div class="modal">
         <div class="modal-content">
             <span class="close" onclick="document.getElementById('patientDetailsModal').innerHTML = ''">&times;</span>
@@ -89,14 +97,14 @@ async def get_patient_html(patient_id: str):
             <p><strong>Birth Date:</strong> {birth_date}</p>
         </div>
     </div>
-    '''
+    """
     return HTMLResponse(content=modal_content)
 
 
-@router.get('/', response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse)
 async def load_patient_page():
     """HTML page for loading patients in a table using HTMX"""
-    html_content = '''
+    html_content = """
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -149,7 +157,7 @@ async def load_patient_page():
     </head>
     <body>
         <h1>Patient Data</h1>
-        <button hx-get="/api/v1/patients-html" hx-target="#patientTableBody" hx-trigger="click">Load Patient Data</button>
+        <button hx-get="/api/v1/patients-htmx" hx-target="#patientTableBody" hx-trigger="click">Load Patient Data</button>
 
         <table>
             <thead>
@@ -168,5 +176,5 @@ async def load_patient_page():
         <div id="patientDetailsModal"></div>
     </body>
     </html>
-    '''
+    """
     return HTMLResponse(content=html_content)
